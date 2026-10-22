@@ -1,6 +1,9 @@
 import io
 import json
 import logging
+import os
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import pandas as pd
 from telegram import Update
 from telegram.ext import (
@@ -11,14 +14,27 @@ from telegram.ext import (
     filters,
 )
 
-# লগিং কনফিগারেশন
+# Logging setup
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO,
 )
 
-# আপনার প্রদত্ত বটের টোকেন
 BOT_TOKEN = "8862995521:AAFKJIP91fc9y7zkbv4zJvCfBd6AAUZlBW0"
+
+
+# Render-এ ফ্রি ওয়েব সার্ভিস চালু রাখার জন্য ডামি সার্ভার
+class SimpleHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is alive and running!")
+
+
+def run_dummy_server():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), SimpleHandler)
+    server.serve_forever()
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -34,7 +50,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file_name = update.message.document.file_name.lower()
     file_bytes = await file.download_as_bytearray()
 
-    # ধাপ ১: মূল ফাইল রিসিভ ও রিড করা
     if "accounts_dict" not in context.user_data:
         try:
             accounts_dict = {}
@@ -82,7 +97,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"❌ ফাইল রিড করতে সমস্যা হয়েছে: {str(e)}")
             return
 
-    # ধাপ ২: ওটিপি টেক্সট ফাইল পাঠালে
     if file_name.endswith(".txt"):
         otp_text = file_bytes.decode("utf-8", errors="ignore")
         await process_otp(otp_text, update, context)
@@ -107,10 +121,9 @@ async def process_otp(otp_text: str, update: Update, context: ContextTypes.DEFAU
             otp_dict[parts[0].strip()] = parts[1].strip()
 
     if not otp_dict:
-        await update.message.reply_text("❌ ওটিপির সঠিক ফরম্যাট পাওয়া যায়নি (ফরম্যাট হতে হবে: `number|otp`)।")
+        await update.message.reply_text("❌ ওটিপির সঠিক ফরম্যাট পাওয়া যায়নি (ফরম্যাট: `number|otp`)।")
         return
 
-    # Number|PASSWORD|OTP ফরম্যাটে ম্যাচিং
     matched_lines = []
     for num, otp in otp_dict.items():
         if num in accounts_dict:
@@ -123,12 +136,10 @@ async def process_otp(otp_text: str, update: Update, context: ContextTypes.DEFAU
         )
         return
 
-    # Text ফাইল তৈরি (In-memory)
     txt_content = "\n".join(matched_lines)
     output = io.BytesIO(txt_content.encode("utf-8"))
     output.seek(0)
 
-    # ইউজারকে .txt ফাইল পাঠানো
     await update.message.reply_document(
         document=output,
         filename="matched_accounts.txt",
@@ -144,12 +155,15 @@ async def process_otp(otp_text: str, update: Update, context: ContextTypes.DEFAU
 
 
 def main():
+    # ডামি সার্ভার ব্যাকগ্রাউন্ড থ্রেডে রান রাখা
+    threading.Thread(target=run_dummy_server, daemon=True).start()
+
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
-    print("🤖 Bot চালু হয়েছে! টেলিগ্রামে গিয়ে মেসেজ দিন...")
+    print("🤖 Bot চালু হয়েছে...")
     app.run_polling()
 
 
