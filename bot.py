@@ -20,7 +20,7 @@ logging.basicConfig(
     level=logging.INFO,
 )
 
-BOT_TOKEN = "8862995521:AAFKJIP91fc9y7zkbv4zJvCfBd6AAUZlBW0"
+BOT_TOKEN = "8441544252:AAHGw8RoZxrL6cvHRB__QJRnAD_ixq4yDwQ"
 
 
 # Render-এ ফ্রি ওয়েব সার্ভিস চালু রাখার জন্য ডামি সার্ভার
